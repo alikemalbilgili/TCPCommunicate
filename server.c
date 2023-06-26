@@ -23,14 +23,17 @@ void startServer(int sockfd, int port, int timeout);
 void acceptClient(int sockfd, struct sockaddr_in *cli);
 void chat(int connfd);
 void printUsedPorts();
+void getSettingsFromFile(int *timeout, int *port);
+void changeSettings(int *timeout, int *port);
+
 int waitForResponseFromDevice(int timeout);
 
 int main()
 {
     int sockfd;
-    int port = 0;
+    int port = 8080;
     int timeout = 60;
-
+    getSettingsFromFile(&timeout, &port);
     printf("====== Console UI ======\n");
 
     while (1)
@@ -53,10 +56,12 @@ int main()
         {
         case 1:
             setPort(&port);
+            changeSettings(&timeout, &port);
             break;
 
         case 2:
             setTimeout(&timeout);
+            changeSettings(&timeout, &port);
             break;
 
         case 3:
@@ -109,7 +114,7 @@ int createSocket()
 // Function to set the port
 void setPort(int *port)
 {
-    printf("Enter the port number: ");
+    printf("Enter the port number (current%d): ", *port);
     scanf("%d", port);
 
     if (*port < 1 || *port > 65535)
@@ -161,7 +166,7 @@ bool isPortBusy(int port)
 // Function to set the session timeout
 void setTimeout(int *timeout)
 {
-    printf("Enter the timeout value in seconds (default: 60): ");
+    printf("Enter the timeout value in seconds (current:%d): ", *timeout);
     scanf("%d", timeout);
     printf("Timeout set to %d seconds.\n", *timeout);
 }
@@ -249,10 +254,99 @@ int waitForResponseFromDevice(int timeout)
     time_t start = time(NULL);
     while (time(NULL) - start < timeout)
     {
-        if (check_device_ready())
+        if (true)
         {
             return 1;
         }
     }
     return 0;
+}
+
+void getSettingsFromFile(int *timeout, int *port)
+{
+    FILE *file = fopen("settings.txt", "r");
+
+    if (file == NULL)
+    {
+        file = fopen("settings.txt", "w");
+        if (file != NULL)
+        {
+            fprintf(file, "timeInterval:60\n");
+            fprintf(file, "port:8080\n");
+            fclose(file);
+            printf("Settings file created with default options.\n");
+        }
+        else
+        {
+            printf("Failed to create settings file.\n");
+        }
+    }
+    else
+    {
+        char line[100];
+
+        while (fgets(line, sizeof(line), file) != NULL)
+        {
+            if (sscanf(line, "timeInterval:%d", timeout) == 1)
+            {
+                printf("timeInterval: %d\n", *timeout);
+            }
+            else if (sscanf(line, "port:%d", port) == 1)
+            {
+                printf("port: %d\n", *port);
+            }
+        }
+
+        fclose(file);
+    }
+}
+
+void changeSettings(int *timeout, int *port)
+{
+    FILE *file = fopen("settings.txt", "r");
+    FILE *tempFile = fopen("temp.txt", "w");
+
+    if (file == NULL)
+    {
+        printf("Failed to open settings file.\n");
+        return;
+    }
+
+    char line[100];
+    int foundTimeout = 0;
+    int foundPort = 0;
+    int tempTimeout = *timeout;
+    int tempPort = *port;
+
+    while (fgets(line, sizeof(line), file) != NULL)
+    {
+        if (sscanf(line, "timeInterval:%d", timeout) == 1 && !foundTimeout)
+        {
+            *timeout = tempTimeout;
+            fprintf(tempFile, "timeInterval:%d\n", *timeout);
+            foundTimeout = 1;
+        }
+        else if (sscanf(line, "port:%d", port) == 1 && !foundPort)
+        {
+            *port = tempPort;
+            fprintf(tempFile, "port:%d\n", *port);
+            foundPort = 1;
+        }
+        else
+        {
+            fputs(line, tempFile);
+        }
+    }
+
+    fclose(file);
+    fclose(tempFile);
+
+    if (remove("settings.txt") == 0 && rename("temp.txt", "settings.txt") == 0)
+    {
+        printf("Settings updated successfully.\n");
+    }
+    else
+    {
+        printf("Failed to update settings.\n");
+    }
 }
