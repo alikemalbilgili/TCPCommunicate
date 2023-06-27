@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <arpa/inet.h> // inet_addr()
 #include <netdb.h>
 #include <sys/time.h>
 
@@ -23,17 +24,20 @@ void startServer(int sockfd, int port, int timeout);
 void acceptClient(int sockfd, struct sockaddr_in *cli);
 void chat(int connfd);
 void printUsedPorts();
-void getSettingsFromFile(int *timeout, int *port);
-void changeSettings(int *timeout, int *port);
-
+void getSettingsFromFile(int *timeout, int *port, char *ip);
+void changeSettings(int *timeout, int *port, char *ip);
+void setServerIp(char *ip);
+int validateServerIP(char *buffer);
 int waitForResponseFromDevice(int timeout);
+
+char ip[50];
 
 int main()
 {
     int sockfd;
     int port = 8080;
     int timeout = 60;
-    getSettingsFromFile(&timeout, &port);
+    getSettingsFromFile(&timeout, &port, ip);
     printf("====== Console UI ======\n");
 
     while (1)
@@ -41,10 +45,11 @@ int main()
         printf("\n");
         printf("┏────────────────────────────┓\n");
         printf("┃ 1. Set Port                ┃\n");
-        printf("┃ 2. Set Session Timeout     ┃\n");
-        printf("┃ 3. Start Server            ┃\n");
-        printf("┃ 4. Print Used Ports        ┃\n");
-        printf("┃ 5. Exit                    ┃\n");
+        printf("┃ 2. Set IP                  ┃\n");
+        printf("┃ 3. Set Session Timeout     ┃\n");
+        printf("┃ 4. Start Server            ┃\n");
+        printf("┃ 5. Print Used Ports        ┃\n");
+        printf("┃ 6. Exit                    ┃\n");
         printf("┃                            ┃\n");
         printf("┗────────────────────────────┛\n");
         printf("\nEnter your choice: ");
@@ -56,15 +61,20 @@ int main()
         {
         case 1:
             setPort(&port);
-            changeSettings(&timeout, &port);
+            changeSettings(&timeout, &port, ip);
             break;
 
         case 2:
-            setTimeout(&timeout);
-            changeSettings(&timeout, &port);
+            setServerIp(ip);
+            changeSettings(&timeout, &port, ip);
             break;
 
         case 3:
+            setTimeout(&timeout);
+            changeSettings(&timeout, &port, ip);
+            break;
+
+        case 4:
             if (port == 0)
             {
                 printf("Error: Port is not set. Please set the port first.\n");
@@ -77,11 +87,11 @@ int main()
             }
             break;
 
-        case 4:
+        case 5:
             printUsedPorts();
             break;
 
-        case 5:
+        case 6:
             printf("Exiting...\n");
             exit(EXIT_SUCCESS);
 
@@ -148,7 +158,7 @@ bool isPortBusy(int port)
     struct sockaddr_in servaddr;
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_addr.s_addr = inet_addr(ip);
     servaddr.sin_port = htons(port);
 
     // if port is used or couldnt bind the port
@@ -184,7 +194,7 @@ void startServer(int sockfd, int port, int timeout)
 
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_addr.s_addr = inet_addr(ip);
     servaddr.sin_port = htons(port);
 
     if ((bind(sockfd, (SA *)&servaddr, sizeof(servaddr))) != 0)
@@ -262,7 +272,7 @@ int waitForResponseFromDevice(int timeout)
     return 0;
 }
 
-void getSettingsFromFile(int *timeout, int *port)
+void getSettingsFromFile(int *timeout, int *port, char *ip)
 {
     FILE *file = fopen("settings.txt", "r");
 
@@ -271,8 +281,9 @@ void getSettingsFromFile(int *timeout, int *port)
         file = fopen("settings.txt", "w");
         if (file != NULL)
         {
-            fprintf(file, "timeInterval:60\n");
+            fprintf(file, "timeOut:60\n");
             fprintf(file, "port:8080\n");
+            fprintf(file, "ipAdress:127.0.0.1\n");
             fclose(file);
             printf("Settings file created with default options.\n");
         }
@@ -287,13 +298,17 @@ void getSettingsFromFile(int *timeout, int *port)
 
         while (fgets(line, sizeof(line), file) != NULL)
         {
-            if (sscanf(line, "timeInterval:%d", timeout) == 1)
+            if (sscanf(line, "timeOut:%d", timeout) == 1)
             {
-                printf("timeInterval: %d\n", *timeout);
+                printf("timeOut: %d\n", *timeout);
             }
             else if (sscanf(line, "port:%d", port) == 1)
             {
                 printf("port: %d\n", *port);
+            }
+            else if (sscanf(line, "ipAdress:%s", ip) == 1)
+            {
+                printf("ipAdress: %d\n", *ip);
             }
         }
 
@@ -301,7 +316,7 @@ void getSettingsFromFile(int *timeout, int *port)
     }
 }
 
-void changeSettings(int *timeout, int *port)
+void changeSettings(int *timeout, int *port, char *ip)
 {
     FILE *file = fopen("settings.txt", "r");
     FILE *tempFile = fopen("temp.txt", "w");
@@ -315,15 +330,18 @@ void changeSettings(int *timeout, int *port)
     char line[100];
     int foundTimeout = 0;
     int foundPort = 0;
+    int foundIpAdress = 0;
     int tempTimeout = *timeout;
     int tempPort = *port;
+    char tempIpAdress[50];
+    strcpy(tempIpAdress, ip);
 
     while (fgets(line, sizeof(line), file) != NULL)
     {
-        if (sscanf(line, "timeInterval:%d", timeout) == 1 && !foundTimeout)
+        if (sscanf(line, "timeOut:%d", timeout) == 1 && !foundTimeout)
         {
             *timeout = tempTimeout;
-            fprintf(tempFile, "timeInterval:%d\n", *timeout);
+            fprintf(tempFile, "timeOut:%d\n", *timeout);
             foundTimeout = 1;
         }
         else if (sscanf(line, "port:%d", port) == 1 && !foundPort)
@@ -331,6 +349,12 @@ void changeSettings(int *timeout, int *port)
             *port = tempPort;
             fprintf(tempFile, "port:%d\n", *port);
             foundPort = 1;
+        }
+        else if (sscanf(line, "ipAdress:%s", ip) == 1 && !foundIpAdress)
+        {
+            strcpy(ip, tempIpAdress);
+            fprintf(tempFile, "ipAdress:%s\n", ip);
+            foundIpAdress = 1;
         }
         else
         {
@@ -349,4 +373,34 @@ void changeSettings(int *timeout, int *port)
     {
         printf("Failed to update settings.\n");
     }
+}
+void setServerIp(char *ip)
+{
+    char buffer[50];
+
+    for (;;)
+    {
+        printf("Please enter to server ip for connection (current %s): ", ip);
+        fgets(buffer, 50, stdin);
+
+        size_t len = strcspn(buffer, "\n"); // Find the index of the newline character
+        if (buffer[len] == '\n')
+            buffer[len] = '\0';
+
+        if (validateServerIP(buffer))
+        {
+            strcpy(ip, buffer);
+            break;
+        }
+        else
+        {
+            printf("Error: Please enter a valid ip adress.\n");
+        }
+    }
+}
+
+int validateServerIP(char *buffer)
+{
+    struct sockaddr_in sa;
+    return inet_pton(AF_INET, buffer, &(sa.sin_addr));
 }
