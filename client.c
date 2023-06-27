@@ -6,10 +6,58 @@
 #include <strings.h> // bzero()
 #include <sys/socket.h>
 #include <unistd.h> // read(), write(), close()
+#include <regex.h>  // regex validation
 
 #define MAX 80
-#define PORT 80
 #define SA struct sockaddr
+
+void func(int sockfd);
+void setClientPort(int *port);
+void setClientIp(char *ip);
+int validateIP(char *buffer);
+char ip[50];
+
+int main()
+{
+    int port;
+    int sockfd, connfd;
+    struct sockaddr_in servaddr, cli;
+
+    setClientPort(&port);
+    setClientIp(ip);
+
+    // socket create and verification
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1)
+    {
+        printf("socket creation failed...\n");
+        exit(0);
+    }
+    else
+        printf("Socket successfully created..\n");
+    bzero(&servaddr, sizeof(servaddr));
+
+    // assign IP, PORT
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    servaddr.sin_port = htons(port);
+
+    // connect the client socket to server socket
+    if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
+    {
+        printf("connection with the server failed...\n");
+        exit(0);
+    }
+    else
+        printf("connected to the server..\n");
+
+    // function for chat
+    func(sockfd);
+
+    // close the socket
+    close(sockfd);
+}
+
 void func(int sockfd)
 {
     char buff[MAX];
@@ -33,39 +81,52 @@ void func(int sockfd)
     }
 }
 
-int main()
+void setClientPort(int *port)
 {
-    int sockfd, connfd;
-    struct sockaddr_in servaddr, cli;
-
-    // socket create and verification
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1)
+    for (;;)
     {
-        printf("socket creation failed...\n");
-        exit(0);
+        printf("Please enter to server port for connection: ");
+        scanf("%d", port);
+
+        if (*port < 1 || *port > 65535)
+        {
+            printf("Error: Invalid port number. Please enter a value between 1 and 65535.\n");
+            *port = 0;
+        }
+        else
+        {
+            break;
+        }
     }
-    else
-        printf("Socket successfully created..\n");
-    bzero(&servaddr, sizeof(servaddr));
+}
 
-    // assign IP, PORT
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    servaddr.sin_port = htons(PORT);
+void setClientIp(char *ip)
+{
+    char buffer[50];
 
-    // connect the client socket to server socket
-    if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
+    for (;;)
     {
-        printf("connection with the server failed...\n");
-        exit(0);
+        printf("Please enter to server ip for connection: ");
+        fgets(buffer, 50, stdin);
+
+        size_t len = strcspn(buffer, "\n"); // Find the index of the newline character
+        if (buffer[len] == '\n')
+            buffer[len] = '\0';
+
+        if (validateIP(buffer))
+        {
+            strcpy(ip, buffer);
+            break;
+        }
+        else
+        {
+            printf("Error: Please enter a valid ip adress.\n");
+        }
     }
-    else
-        printf("connected to the server..\n");
+}
 
-    // function for chat
-    func(sockfd);
-
-    // close the socket
-    close(sockfd);
+int validateIP(char *buffer)
+{
+    struct sockaddr_in sa;
+    return inet_pton(AF_INET, buffer, &(sa.sin_addr));
 }

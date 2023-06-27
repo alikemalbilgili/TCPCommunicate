@@ -197,7 +197,7 @@ void startServer(int sockfd, int port, int timeout)
         printf("Socket successfully binded..\n");
     }
 
-    if (waitForResponseFromDevice(timeout) || (listen(sockfd, 5)) != 0)
+    if ((listen(sockfd, 5)) != 0)
     {
         perror("listen");
         exit(EXIT_FAILURE);
