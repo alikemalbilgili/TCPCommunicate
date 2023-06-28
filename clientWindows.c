@@ -1,17 +1,12 @@
-#include <arpa/inet.h> // inet_addr()
-#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h> // bzero()
-#include <sys/socket.h>
-#include <unistd.h> // read(), write(), close()
-#include <regex.h>  // regex validation
+#include <winsock2.h> // Winsock library
 
 #define MAX 80
 #define SA struct sockaddr
 
-void func(int sockfd);
+void func(SOCKET sockfd);
 void setClientPort(int *port);
 void setClientIp(char *ip);
 int validateIP(char *buffer);
@@ -19,8 +14,15 @@ char ip[50];
 
 int main()
 {
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
+    {
+        printf("Failed to initialize winsock.\n");
+        return 1;
+    }
+
     int port;
-    int sockfd, connfd;
+    SOCKET sockfd;
     struct sockaddr_in servaddr, cli;
 
     setClientPort(&port);
@@ -28,14 +30,14 @@ int main()
 
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1)
+    if (sockfd == INVALID_SOCKET)
     {
-        printf("socket creation failed...\n");
-        exit(0);
+        printf("Socket creation failed...\n");
+        WSACleanup();
+        return 1;
     }
     else
         printf("Socket successfully created..\n");
-    bzero(&servaddr, sizeof(servaddr));
 
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
@@ -45,33 +47,37 @@ int main()
     // connect the client socket to server socket
     if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
     {
-        printf("connection with the server failed...\n");
-        exit(0);
+        printf("Connection with the server failed...\n");
+        closesocket(sockfd);
+        WSACleanup();
+        return 1;
     }
     else
-        printf("connected to the server..\n");
+        printf("Connected to the server..\n");
 
     // function for chat
     func(sockfd);
 
     // close the socket
-    close(sockfd);
+    closesocket(sockfd);
+    WSACleanup();
+    return 0;
 }
 
-void func(int sockfd)
+void func(SOCKET sockfd)
 {
     char buff[MAX];
     int n;
     for (;;)
     {
-        bzero(buff, sizeof(buff));
+        memset(buff, 0, sizeof(buff));
         printf("Enter the string : ");
         n = 0;
         while ((buff[n++] = getchar()) != '\n')
             ;
-        write(sockfd, buff, sizeof(buff));
-        bzero(buff, sizeof(buff));
-        read(sockfd, buff, sizeof(buff));
+        send(sockfd, buff, sizeof(buff), 0);
+        memset(buff, 0, sizeof(buff));
+        recv(sockfd, buff, sizeof(buff), 0);
         printf("From Server : %s", buff);
         if ((strncmp(buff, "exit", 4)) == 0)
         {
@@ -85,7 +91,7 @@ void setClientPort(int *port)
 {
     for (;;)
     {
-        printf("Please enter to server port for connection: ");
+        printf("Please enter the server port for connection: ");
         scanf("%d", port);
 
         if (*port < 1 || *port > 65535)
@@ -106,7 +112,7 @@ void setClientIp(char *ip)
 
     for (;;)
     {
-        printf("Please enter to server ip for connection: ");
+        printf("Please enter the server IP for connection: ");
         fgets(buffer, 50, stdin);
 
         size_t len = strcspn(buffer, "\n"); // Find the index of the newline character
@@ -120,7 +126,7 @@ void setClientIp(char *ip)
         }
         else
         {
-            printf("Error: Please enter a valid ip adress.\n");
+            printf("Error: Please enter a valid IP address.\n");
         }
     }
 }
@@ -128,5 +134,5 @@ void setClientIp(char *ip)
 int validateIP(char *buffer)
 {
     struct sockaddr_in sa;
-    return inet_pton(AF_INET, buffer, &(sa.sin_addr));
+    return inet_addr(buffer) != INADDR_NONE;
 }

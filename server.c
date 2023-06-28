@@ -194,7 +194,7 @@ void startServer(int sockfd, int port, int timeout)
 
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr(ip);
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(port);
 
     if ((bind(sockfd, (SA *)&servaddr, sizeof(servaddr))) != 0)
