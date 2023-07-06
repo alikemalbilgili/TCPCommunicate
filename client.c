@@ -45,6 +45,7 @@ int main()
     // connect the client socket to server socket
     if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
     {
+        perror("Connection error");
         printf("connection with the server failed...\n");
         exit(0);
     }
@@ -109,7 +110,7 @@ void setClientIp(char *ip)
         printf("Please enter to server ip for connection: ");
         fgets(buffer, 50, stdin);
 
-        size_t len = strcspn(buffer, "\n"); // Find the index of the newline character
+        size_t len = strcspn(buffer, "\n");
         if (buffer[len] == '\n')
             buffer[len] = '\0';
 

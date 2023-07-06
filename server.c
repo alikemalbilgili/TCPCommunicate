@@ -11,6 +11,7 @@
 #include <arpa/inet.h> // inet_addr()
 #include <netdb.h>
 #include <sys/time.h>
+#include <sys/select.h>
 
 #define MAX 80
 #define SA struct sockaddr
@@ -148,7 +149,8 @@ void setPort(int *port)
 // Function to check if a port is busy
 bool isPortBusy(int port)
 {
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    int sockfd =
+        socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1)
     {
         perror("socket");
@@ -158,13 +160,14 @@ bool isPortBusy(int port)
     struct sockaddr_in servaddr;
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr(ip);
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(port);
 
     // if port is used or couldnt bind the port
     if ((bind(sockfd, (SA *)&servaddr, sizeof(servaddr))) != 0)
     {
         // Port is busy
+        perror("bind");
         close(sockfd);
         return true;
     }
@@ -186,8 +189,6 @@ void printUsedPorts()
     printf("List of used ports:\n");
     system("lsof -i -P | grep LISTEN");
 }
-
-// Function to start the server
 void startServer(int sockfd, int port, int timeout)
 {
     struct sockaddr_in servaddr;
@@ -219,20 +220,44 @@ void startServer(int sockfd, int port, int timeout)
 
     struct sockaddr_in cli;
     int len = sizeof(cli);
-    int connfd = accept(sockfd, (SA *)&cli, (socklen_t *)&len);
-    if (connfd < 0)
+
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(sockfd, &readfds);
+
+    struct timeval timeout_val;
+    timeout_val.tv_sec = timeout;
+    timeout_val.tv_usec = 0;
+
+    // Wait for client connection with a timeout
+    int selectResult = select(sockfd + 1, &readfds, NULL, NULL, &timeout_val);
+    if (selectResult == -1)
     {
-        perror("accept");
+        perror("select");
         exit(EXIT_FAILURE);
     }
-    else
+    else if (selectResult == 0)
     {
-        printf("Server accept the client...\n");
+        printf("Timeout: No client connection within %d seconds.\n", timeout);
+        exit(EXIT_FAILURE);
     }
+    else if (FD_ISSET(sockfd, &readfds))
+    {
+        int connfd = accept(sockfd, (SA *)&cli, (socklen_t *)&len);
+        if (connfd < 0)
+        {
+            perror("accept");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            printf("Server accepted the client...\n");
+        }
 
-    chat(connfd);
+        chat(connfd);
 
-    close(connfd);
+        close(connfd);
+    }
 }
 
 // Function to handle the chat between client and server
